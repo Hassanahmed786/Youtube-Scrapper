@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Scraper</title>
+  <style>
+    :root {
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --accent-light: #eff6ff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --error: #b91c1c;
+      --error-light: #fef2f2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #fff;
+      color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
+    h1 { margin: 0 0 4px; font-size: 26px; }
+    h2 { margin: 24px 0 8px; font-size: 16px; }
+    .subtitle { margin: 0 0 20px; color: var(--muted); }
+    [hidden] { display: none !important; }
+
+    /* input */
+    label { display: block; margin-bottom: 6px; font-weight: 600; }
+    textarea {
+      width: 100%;
+      height: 180px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      resize: vertical;
+    }
+    textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+    .input-footer { display: flex; align-items: center; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+    #count { color: var(--muted); }
+    #count.too-many { color: var(--error); font-weight: 600; }
+
+    /* buttons */
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.secondary { background: #fff; color: var(--accent); }
+    button.secondary:hover:not(:disabled) { background: var(--accent-light); border-color: var(--accent); }
+    #scrapeBtn { margin-left: auto; }
+    button.link-btn {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--accent);
+      font-weight: 500;
+      font-size: 13px;
+    }
+    button.link-btn:hover:not(:disabled) { background: none; text-decoration: underline; }
+
+    /* spinner inside buttons */
+    .spinner {
+      display: none;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    button.secondary .spinner { border-color: rgba(37, 99, 235, 0.25); border-top-color: var(--accent); }
+    button.loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* message box */
+    #message {
+      margin-top: 16px;
+      padding: 10px 14px;
+      border: 1px solid var(--accent);
+      border-left-width: 4px;
+      border-radius: 6px;
+      background: var(--accent-light);
+    }
+    #message.error { border-color: var(--error); background: var(--error-light); color: var(--error); }
+    #message a { margin-left: 8px; color: var(--accent); font-weight: 600; }
+
+    /* results */
+    .summary-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 28px 0 10px; }
+    #summary { margin-right: auto; font-size: 16px; font-weight: 600; }
+    .table-wrap {
+      max-height: 60vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table { width: 100%; min-width: 900px; border-collapse: collapse; }
+    th, td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f9fafb;
+      border-bottom: 2px solid var(--border);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    tbody tr:hover { background: #fafafa; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td a { color: var(--accent); text-decoration: none; }
+    td a:hover { text-decoration: underline; }
+    td.title { min-width: 200px; font-weight: 600; }
+    td.channel { min-width: 120px; }
+    td.desc { min-width: 280px; color: #374151; font-size: 14px; overflow-wrap: anywhere; }
+    td.desc.open { white-space: pre-wrap; }
+    td.date { white-space: nowrap; font-size: 14px; }
+    td.views, th.views { text-align: right; font-variant-numeric: tabular-nums; }
+    td.url { max-width: 240px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #noRows { padding: 16px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); }
+
+    /* failed list */
+    #failed { margin-top: 8px; }
+    #failed ul { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; }
+    #failed li { display: flex; gap: 16px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    #failed li:last-child { border-bottom: 0; }
+    #failed .failed-url { flex: 1; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+    #failed .failed-reason { color: var(--error); font-weight: 600; white-space: nowrap; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>YouTube Scraper</h1>
+  <p class="subtitle">Paste video links, scrape the data, then save it to Google Sheets or download it.</p>
+
+  <label for="urls">Paste YouTube URLs or video IDs, one per line</label>
+  <textarea id="urls" spellcheck="false" placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/jNQXAC9IVRw&#10;https://www.youtube.com/shorts/abcdefghijk&#10;dQw4w9WgXcQ"></textarea>
+  <div class="input-footer">
+    <span id="count">0 URLs detected</span>
+    <button id="scrapeBtn" type="button">
+      <span class="spinner"></span>
+      <span id="scrapeLabel">Scrape</span>
+    </button>
+  </div>
+
+  <div id="message" role="alert" hidden></div>
+
+  <section id="results" hidden>
+    <div class="summary-row">
+      <div id="summary"></div>
+      <button id="saveBtn" class="secondary" type="button" disabled>
+        <span class="spinner"></span>
+        <span>Save to Google Sheets</span>
+      </button>
+      <button id="csvBtn" class="secondary" type="button" disabled>Download CSV</button>
+      <button id="xlsxBtn" class="secondary" type="button" disabled>Download Excel</button>
+    </div>
+
+    <div id="tableWrap" class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Channel</th>
+            <th>Description</th>
+            <th>Publish Date</th>
+            <th class="views">Views</th>
+            <th>URL</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div id="noRows" hidden>No videos could be scraped. See the failed URLs below.</div>
+
+    <div id="failed" hidden>
+      <h2 id="failedTitle"></h2>
+      <ul id="failedList"></ul>
+    </div>
+  </section>
+</main>
+
+<script>
+  const MAX_URLS = {{ max_urls }};
+  const DESCRIPTION_LIMIT = 150;
+
+  const $ = (id) => document.getElementById(id);
+  const urlsBox = $("urls");
+  const countEl = $("count");
+  const scrapeBtn = $("scrapeBtn");
+  const saveBtn = $("saveBtn");
+  const csvBtn = $("csvBtn");
+  const xlsxBtn = $("xlsxBtn");
+  const messageEl = $("message");
+
+  let hasResults = false;
+  let scraping = false;
+  let saving = false;
+
+  // ---------- URL counter ----------
+
+  // non-blank lines without duplicates (same rule as the server)
+  function getUrls() {
+    const lines = urlsBox.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    return Array.from(new Set(lines));
+  }
+
+  function updateCount() {
+    const n = getUrls().length;
+    countEl.textContent = n === 1 ? "1 URL detected" : n + " URLs detected";
+    if (n > MAX_URLS) countEl.textContent += " (limit is " + MAX_URLS + " per request)";
+    countEl.classList.toggle("too-many", n > MAX_URLS);
+  }
+
+  // ---------- messages ----------
+
+  function showMessage(text, kind, linkHref, linkText) {
+    messageEl.textContent = text;
+    messageEl.className = kind === "error" ? "error" : "";
+    if (linkHref) {
+      const a = document.createElement("a");
+      a.href = linkHref;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = linkText;
+      messageEl.append(a);
+    }
+    messageEl.hidden = false;
+    messageEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function hideMessage() {
+    messageEl.hidden = true;
+  }
+
+  // ---------- talking to the server ----------
+
+  async function request(url, options) {
+    try {
+      return await fetch(url, options);
+    } catch (e) {
+      throw new Error("Could not reach the server. Is app.py still running?");
+    }
+  }
+
+  async function readError(res) {
+    try {
+      const data = await res.json();
+      if (data && data.error) return data.error;
+    } catch (e) { /* not JSON */ }
+    return "Server error (HTTP " + res.status + ").";
+  }
+
+  async function postJSON(url, body) {
+    const res = await request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    if (!res.ok) throw new Error(await readError(res));
+    return res.json();
+  }
+
+  // ---------- button states ----------
+
+  function updateButtons() {
+    const canUse = hasResults && !scraping && !saving;
+    saveBtn.disabled = !canUse;
+    csvBtn.disabled = !canUse;
+    xlsxBtn.disabled = !canUse;
+    scrapeBtn.disabled = scraping;
+    scrapeBtn.classList.toggle("loading", scraping);
+    saveBtn.classList.toggle("loading", saving);
+    $("scrapeLabel").textContent = scraping ? "Scraping..." : "Scrape";
+  }
+
+  // ---------- table ----------
+
+  function cell(className, text) {
+    const td = document.createElement("td");
+    td.className = className;
+    td.textContent = text;
+    return td;
+  }
+
+  // only link to normal YouTube watch URLs
+  function isSafeVideoUrl(url) {
+    return /^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(url || "");
+  }
+
+  function titleCell(r) {
+    const td = document.createElement("td");
+    td.className = "title";
+    if (isSafeVideoUrl(r.url)) {
+      const a = document.createElement("a");
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = r.title || r.url;
+      td.append(a);
+    } else {
+      td.textContent = r.title || "(no title)";
+    }
+    return td;
+  }
+
+  // description cut to about 150 characters with show more / show less
+  function descriptionCell(text) {
+    const td = document.createElement("td");
+    td.className = "desc";
+    text = text || "";
+    const chars = Array.from(text);
+    if (chars.length <= DESCRIPTION_LIMIT) {
+      td.textContent = text;
+      return td;
+    }
+
+    const short = chars.slice(0, DESCRIPTION_LIMIT).join("").replace(/\s+/g, " ").trimEnd() + "...";
+    const span = document.createElement("span");
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "link-btn";
+    let open = false;
+
+    function paint() {
+      span.textContent = open ? text : short;
+      toggle.textContent = open ? "show less" : "show more";
+      td.classList.toggle("open", open);
+    }
+    toggle.addEventListener("click", () => {
+      open = !open;
+      paint();
+    });
+    paint();
+    td.append(span, " ", toggle);
+    return td;
+  }
+
+  function viewsCell(views) {
+    const text = views === null || views === undefined ? "n/a" : Number(views).toLocaleString("en-US");
+    return cell("views", text);
+  }
+
+  function urlCell(url) {
+    const td = document.createElement("td");
+    td.className = "url";
+    if (isSafeVideoUrl(url)) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = url.replace("https://www.", "");
+      a.title = url;
+      td.append(a);
+    } else {
+      td.textContent = url || "";
+    }
+    return td;
+  }
+
+  function buildRow(r) {
+    const tr = document.createElement("tr");
+    tr.append(
+      titleCell(r),
+      cell("channel", r.channel || ""),
+      descriptionCell(r.description),
+      cell("date", r.publish_date || ""),
+      viewsCell(r.views),
+      urlCell(r.url)
+    );
+    return tr;
+  }
+
+  function showResults(results, errors) {
+    $("summary").textContent = results.length + " scraped, " + errors.length + " failed";
+    $("tbody").replaceChildren(...results.map(buildRow));
+    $("tableWrap").hidden = results.length === 0;
+    $("noRows").hidden = results.length > 0;
+
+    // list of failed URLs with the reason
+    const failedBox = $("failed");
+    failedBox.hidden = errors.length === 0;
+    $("failedTitle").textContent = "Failed URLs (" + errors.length + ")";
+    $("failedList").replaceChildren(...errors.map((e) => {
+      const li = document.createElement("li");
+      const url = document.createElement("span");
+      url.className = "failed-url";
+      url.textContent = e.url;
+      const reason = document.createElement("span");
+      reason.className = "failed-reason";
+      reason.textContent = e.reason;
+      li.append(url, reason);
+      return li;
+    }));
+
+    $("results").hidden = false;
+    hasResults = results.length > 0;
+    updateButtons();
+  }
+
+  // ---------- actions ----------
+
+  async function scrape() {
+    hideMessage();
+    const urls = getUrls();
+    if (urls.length === 0) {
+      showMessage("Paste at least one YouTube URL or video ID first.", "error");
+      return;
+    }
+    if (urls.length > MAX_URLS) {
+      showMessage("Too many URLs (" + urls.length + "). The limit is " + MAX_URLS + " per request.", "error");
+      return;
+    }
+
+    scraping = true;
+    updateButtons();
+    try {
+      const data = await postJSON("/scrape", { urls: urlsBox.value });
+      showResults(data.results, data.errors);
+    } catch (err) {
+      showMessage(err.message, "error");
+    } finally {
+      scraping = false;
+      updateButtons();
+    }
+  }
+
+  function plural(n, word) {
+    return n + " " + word + (n === 1 ? "" : "s");
+  }
+
+  async function saveToSheet() {
+    hideMessage();
+    saving = true;
+    updateButtons();
+    try {
+      const data = await postJSON("/save-to-sheet");
+      showMessage(
+        plural(data.added, "row") + " added, " + data.skipped + " skipped (already in sheet).",
+        "ok",
+        data.sheet_url,
+        "Open Google Sheet"
+      );
+    } catch (err) {
+      showMessage(err.message, "error");
+    } finally {
+      saving = false;
+      updateButtons();
+    }
+  }
+
+  // download through fetch so that errors can be shown on the page
+  async function download(kind) {
+    hideMessage();
+    try {
+      const res = await request("/download/" + kind);
+      if (!res.ok) throw new Error(await readError(res));
+      const blob = await res.blob();
+      const header = res.headers.get("Content-Disposition") || "";
+      const match = header.match(/filename="?([^";]+)"?/);
+      const name = match ? match[1] : "youtube_videos." + kind;
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = name;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+    } catch (err) {
+      showMessage(err.message, "error");
+    }
+  }
+
+  urlsBox.addEventListener("input", updateCount);
+  urlsBox.addEventListener("keydown", (e) => {
+    // Ctrl+Enter (or Cmd+Enter) starts the scrape
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !scraping) scrape();
+  });
+  scrapeBtn.addEventListener("click", scrape);
+  saveBtn.addEventListener("click", saveToSheet);
+  csvBtn.addEventListener("click", () => download("csv"));
+  xlsxBtn.addEventListener("click", () => download("xlsx"));
+
+  updateCount();
+  updateButtons();
+</script>
+</body>
+</html>
